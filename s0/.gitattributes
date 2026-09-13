@@ -1,0 +1,7 @@
+# doctor.sh must keep LF endings or bash refuses to run it after a Windows
+# clone. doctor.ps1 is happier with CRLF.
+*.sh        text eol=lf
+Makefile    text eol=lf
+*.sql       text eol=lf
+*.yml       text eol=lf
+*.ps1       text eol=crlf

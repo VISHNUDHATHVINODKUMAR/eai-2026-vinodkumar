@@ -1,0 +1,44 @@
+﻿**********************
+Windows PowerShell transcript start
+Start time: 20260913114851
+Username: DESKTOP-30NRI8L\User
+RunAs User: DESKTOP-30NRI8L\User
+Configuration Name: 
+Machine: DESKTOP-30NRI8L (Microsoft Windows NT 10.0.26200.0)
+Host Application: C:\WINDOWS\System32\WindowsPowerShell\v1.0\powershell.exe
+Process ID: 46944
+PSVersion: 5.1.26100.9168
+PSEdition: Desktop
+PSCompatibleVersions: 1.0, 2.0, 3.0, 4.0, 5.0, 5.1.26100.9168
+BuildVersion: 10.0.26100.9168
+CLRVersion: 4.0.30319.42000
+WSManStackVersion: 3.0
+PSRemotingProtocolVersion: 2.3
+SerializationVersion: 1.1.0.1
+**********************
+Transcript started, output file is doctor-output.txt
+PS C:\Users\User\Desktop\eai-2026-vinodkumar\s0> .\doctor.ps1
+EAI 2026 - Session 0 doctor
+===========================
+
+[1/7] Docker daemon reachable
+PASS
+[2/7] Compose v2 present
+PASS
+[3/7] Both containers running
+PASS
+[4/7] Both containers healthy
+PASS
+[5/7] Ports 8080 and 5432 bound
+PASS
+[6/7] Seed row readable from Postgres
+PASS
+[7/7] Free disk space above 5 GB
+PASS
+
+DOCTOR: PASS
+PS C:\Users\User\Desktop\eai-2026-vinodkumar\s0> Stop-Transcript
+**********************
+Windows PowerShell transcript end
+End time: 20260913114920
+**********************

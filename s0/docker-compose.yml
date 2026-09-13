@@ -1,0 +1,51 @@
+# EAI 2026 · Session 0 pre-flight stack.
+#
+# Two services, nothing else: a tiny HTTP service and a Postgres database.
+# The point is not the stack — it is proving that your machine can run a
+# stack at all, before an assignment depends on it.
+#
+# Images are pinned on purpose. Everyone in the cohort runs the same bytes.
+
+name: eai-s0
+
+services:
+  echo:
+    image: nginx:1.27-alpine
+    container_name: eai-s0-echo
+    ports:
+      - "8080:80"
+    volumes:
+      - ./echo/index.html:/usr/share/nginx/html/index.html:ro
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 5s
+    restart: unless-stopped
+
+  postgres:
+    image: postgres:18-alpine
+    container_name: eai-s0-postgres
+    environment:
+      POSTGRES_USER: eai
+      POSTGRES_PASSWORD: eai
+      POSTGRES_DB: eai
+    ports:
+      - "5432:5432"
+    volumes:
+      # Mounted one level above PGDATA so this works whichever data-directory
+      # layout the postgres image uses.
+      - pgdata:/var/lib/postgresql
+      # Scripts here run exactly once: on the first start of an empty volume.
+      - ./init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U eai -d eai"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    restart: unless-stopped
+
+volumes:
+  pgdata:
