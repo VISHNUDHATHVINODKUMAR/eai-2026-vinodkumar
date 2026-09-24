@@ -45,9 +45,7 @@ def get_rabbitmq_connection():
 ROUTES = {
     'physical': 'orders.physical',
     'digital': 'orders.digital',
-    # TODO: this assignment adds a third item type. What routing key should
-    # 'subscription' items go to? Keep the naming convention consistent with
-    # the other two.
+    'subscription': 'orders.subscription',
 }
 
 
@@ -71,23 +69,44 @@ def route_order(ch, method, properties, body):
     connection = get_rabbitmq_connection()
     channel = connection.channel()
 
-    # TODO: declare the output queues you publish to (idempotent -- safe to
-    # call every time). You need at least orders.physical, orders.digital,
-    # orders.subscription. (orders.results is declared by the workers that
-    # publish to it; you do not need it here.)
+    # Declare every queue we might publish to, idempotently.
+    for queue_name in ROUTES.values():
+        channel.queue_declare(queue=queue_name, durable=True)
 
     items = order.get('items', [])
     item_count = len(items)
 
-    # TODO — SPLITTER + CONTENT-BASED ROUTER:
-    # For each item in `items` (keep track of its index):
-    #   1. Build the item message dict per the required shape above.
-    #   2. Look up the routing key for item['type'] in ROUTES.
-    #   3. Decide what happens for a type that is not in ROUTES -- do not
-    #      let it silently vanish. Log it and pick a defensible fallback;
-    #      say what you did and why in your ADR.
-    #   4. channel.basic_publish(..., properties=pika.BasicProperties(delivery_mode=2))
-    #      so the message survives a broker restart.
+    for item_index, item in enumerate(items):
+        item_message = {
+            "orderId": order_id,
+            "correlationId": correlation_id,
+            "itemIndex": item_index,
+            "totalItems": item_count,
+            "item": item,
+        }
+
+        item_type = item.get('type')
+        routing_key = ROUTES.get(item_type)
+
+        if routing_key is None:
+            # Unknown item type: don't let it vanish silently. Log it and
+            # route it to orders.physical as a defensible fallback (a
+            # physical fulfillment path is the safest default — it still
+            # produces a result the aggregator can count, rather than the
+            # item disappearing and the order hanging until timeout).
+            # See docs/adr-002.md for the reasoning.
+            print(
+                f"[Router] Unknown item type '{item_type}' for order "
+                f"{order_id}, item {item_index} -- routing to orders.physical"
+            )
+            routing_key = 'orders.physical'
+
+        channel.basic_publish(
+            exchange='',
+            routing_key=routing_key,
+            body=json.dumps(item_message),
+            properties=pika.BasicProperties(delivery_mode=2)  # Persistent
+        )
 
     connection.close()
 
