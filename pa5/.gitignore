@@ -1,0 +1,3 @@
+node_modules/
+notification-service/data/notification.log
+notification-service/data/processed-ids.json
