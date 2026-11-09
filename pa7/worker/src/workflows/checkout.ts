@@ -1,45 +1,150 @@
-/**
- * The checkout workflow — YOURS TO WRITE.
- *
- * This is your PA6 saga, ported: the same four steps, the same reverse-order
- * compensation, the same outcomes (README.md §4). What you no longer write is
- * everything PA6 made you build around it — the timeout plumbing, the retry
- * loop, the in-progress record and the "where was I?" state. Temporal keeps
- * every step's result in the workflow's history.
- *
- * Workflow code runs in Temporal's deterministic sandbox, and is replayed
- * from that history whenever a worker has to rebuild the workflow's state:
- *
- *   - No I/O here. No fetch, no axios, no fs, no process.env. Every call to
- *     the outside world is an activity, through `act` below.
- *   - Import only types from ../activities, never the functions themselves.
- *   - `new Date()` is fine: inside a workflow it returns the workflow's own
- *     time, which is the same on every replay. Use it for the trace.
- *
- * An activity that fails for good reaches you as an ActivityFailure. Its
- * `cause` says why: a TimeoutFailure when the attempts timed out, or an
- * ApplicationFailure whose `type` is the code your activity threw.
- */
-import { proxyActivities } from "@temporalio/workflow";
+import {
+  proxyActivities,
+  ActivityFailure,
+  ApplicationFailure,
+  TimeoutFailure,
+} from "@temporalio/workflow";
 import type * as activities from "../activities";
-import type { CanonicalOrder, CheckoutResult } from "../types";
+import type { CanonicalItem, CanonicalOrder, CheckoutResult, TraceItem } from "../types";
 
-// TODO (student): add the retry policy from README.md §4. Without one,
-// Temporal retries a failing activity forever.
+// The retry policy from the README: three attempts, 200 ms, doubling.
 const act = proxyActivities<typeof activities>({
   startToCloseTimeout: "2500 ms",
+  retry: {
+    maximumAttempts: 3,
+    initialInterval: "200 ms",
+    backoffCoefficient: 2,
+  },
 });
 
+// ------------------------------------------------------------------ money --
+// Ported from PA6: whole cents as integers, formatted once at the end.
+
+function priceToCents(price: string): number {
+  let text = price;
+  let sign = 1;
+  if (text.startsWith("-")) {
+    sign = -1;
+    text = text.slice(1);
+  }
+  const parts = text.split(".");
+  const whole = Number(parts[0]);
+  const fraction = Number(parts[1] ?? "0");
+  return sign * (whole * 100 + fraction);
+}
+
+function centsToAmount(totalCents: number): string {
+  let sign = "";
+  let cents = totalCents;
+  if (cents < 0) {
+    sign = "-";
+    cents = -cents;
+  }
+  const whole = Math.floor(cents / 100);
+  const fraction = cents % 100;
+  return `${sign}${whole}.${String(fraction).padStart(2, "0")}`;
+}
+
+function computeAmount(items: CanonicalItem[]): string {
+  let totalCents = 0;
+  for (const item of items) {
+    totalCents += priceToCents(item.unitPrice) * item.quantity;
+  }
+  return centsToAmount(totalCents);
+}
+
+// ------------------------------------------------------------------ steps --
+
+interface StepOutcome {
+  ok: boolean;
+  status: string; // success | failed | timeout
+  code: string;
+}
+
+// Runs one activity and records exactly one trace entry (not one per attempt).
+async function runStep(step: string, trace: TraceItem[], call: () => Promise<void>): Promise<StepOutcome> {
+  const startedAt = new Date();
+  let outcome: StepOutcome = { ok: true, status: "success", code: "" };
+
+  try {
+    await call();
+  } catch (err) {
+    if (err instanceof ActivityFailure && err.cause instanceof TimeoutFailure) {
+      outcome = { ok: false, status: "timeout", code: "timeout" };
+    } else if (err instanceof ActivityFailure && err.cause instanceof ApplicationFailure) {
+      outcome = { ok: false, status: "failed", code: err.cause.type ?? `${step}_failed` };
+    } else {
+      outcome = { ok: false, status: "failed", code: `${step}_failed` };
+    }
+  }
+
+  const finishedAt = new Date();
+  trace.push({
+    step,
+    status: outcome.status,
+    startedAt: startedAt.toISOString(),
+    finishedAt: finishedAt.toISOString(),
+    durationMs: finishedAt.getTime() - startedAt.getTime(),
+  });
+
+  return outcome;
+}
+
 export async function checkout(order: CanonicalOrder): Promise<CheckoutResult> {
-  // TODO (student): the saga.
-  //   1) act.authorizePayment(orderId, amount)   amount: as in PA6, a two-digit
-  //                                              decimal string summed in cents
-  //   2) act.reserveInventory(orderId, items)
-  //   3) act.createShipment(orderId)
-  //   4) act.sendNotification(orderId, customer.email)
-  // On a failure, compensate what completed, newest first:
-  //   act.releaseInventory(orderId), then act.refundPayment(orderId).
-  // Record every call in the trace, and return a CheckoutResult for every
-  // outcome — success and failure alike. Do not throw.
-  return { orderId: order.orderId, status: "failed", code: "not_implemented", trace: [] };
+  const orderId = order.orderId;
+  const trace: TraceItem[] = [];
+  const amount = computeAmount(order.items);
+  const recipient = order.customer.email;
+
+  const forwardSteps = [
+    { step: "payment", call: () => act.authorizePayment(orderId, amount) },
+    { step: "inventory", call: () => act.reserveInventory(orderId, order.items) },
+    { step: "shipping", call: () => act.createShipment(orderId) },
+    { step: "notification", call: () => act.sendNotification(orderId, recipient) },
+  ];
+
+  // Strictly one after another. Stop at the first step that fails for good.
+  const completed: string[] = [];
+  let failure: StepOutcome | null = null;
+  let failedStep = "";
+
+  for (const forward of forwardSteps) {
+    const outcome = await runStep(forward.step, trace, forward.call);
+    if (outcome.ok) {
+      completed.push(forward.step);
+    } else {
+      failure = outcome;
+      failedStep = forward.step;
+      break;
+    }
+  }
+
+  if (failure === null) {
+    return { orderId, status: "completed", trace };
+  }
+
+  // Compensate what completed, newest first. Shipping and notification
+  // have nothing to undo.
+  let compensationFailed = false;
+
+  if (completed.includes("inventory")) {
+    const release = await runStep("inventory_release", trace, () => act.releaseInventory(orderId));
+    if (!release.ok) {
+      compensationFailed = true;
+    }
+  }
+  if (completed.includes("payment")) {
+    const refund = await runStep("payment_refund", trace, () => act.refundPayment(orderId));
+    if (!refund.ok) {
+      compensationFailed = true;
+    }
+  }
+
+  if (compensationFailed) {
+    return { orderId, status: "failed", code: "compensation_failed", trace };
+  }
+
+  // Payment failed: nothing was done, so "failed". Later step: "compensated".
+  const status = failedStep === "payment" ? "failed" : "compensated";
+  return { orderId, status, code: failure.code, trace };
 }
