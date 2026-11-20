@@ -1,0 +1,57 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" width="1400" height="650" viewBox="0 0 1400 650">
+  <defs>
+    <marker id="arrow" markerWidth="10" markerHeight="10" refX="9" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L9,3 z" fill="#334155"/>
+    </marker>
+    <style>
+      .task { fill:#e0f2fe; stroke:#0369a1; stroke-width:2; }
+      .comp { fill:#fef3c7; stroke:#b45309; stroke-width:2; }
+      .event { fill:#fff; stroke:#334155; stroke-width:3; }
+      .line { stroke:#334155; stroke-width:2.5; fill:none; marker-end:url(#arrow); }
+      .label { font:16px Arial,sans-serif; fill:#0f172a; text-anchor:middle; }
+      .small { font:13px Arial,sans-serif; fill:#475569; text-anchor:middle; }
+      .heading { font:bold 25px Arial,sans-serif; fill:#0f172a; }
+    </style>
+  </defs>
+  <text x="45" y="42" class="heading">Checkout Saga — BPMN overview</text>
+  <text x="45" y="70" class="small">Order accepted → pricing → order-type decision → payment (except B2B) → inventory → shipping → notification</text>
+  <circle cx="80" cy="230" r="22" class="event"/>
+  <text x="80" y="275" class="label">Order accepted</text>
+  <path d="M102 230 H155" class="line"/>
+  <rect x="155" y="195" width="145" height="70" rx="12" class="task"/>
+  <text x="227" y="235" class="label">Get pricing</text>
+  <path d="M300 230 H365" class="line"/>
+  <polygon points="405,190 445,230 405,270 365,230" fill="#fef9c3" stroke="#a16207" stroke-width="2"/>
+  <text x="405" y="310" class="label">B2B?</text>
+  <path d="M445 230 H490" class="line"/>
+  <text x="465" y="210" class="small">No</text>
+  <rect x="490" y="195" width="150" height="70" rx="12" class="task"/>
+  <text x="565" y="235" class="label">Authorize payment</text>
+  <path d="M640 230 H705" class="line"/>
+  <path d="M405 270 V370 H705 V265" class="line"/>
+  <text x="465" y="390" class="small">Yes — skip payment</text>
+  <rect x="705" y="195" width="150" height="70" rx="12" class="task"/>
+  <text x="780" y="235" class="label">Reserve inventory</text>
+  <path d="M855 230 H915" class="line"/>
+  <rect x="915" y="195" width="145" height="70" rx="12" class="task"/>
+  <text x="987" y="235" class="label">Arrange shipping</text>
+  <path d="M1060 230 H1120" class="line"/>
+  <rect x="1120" y="195" width="145" height="70" rx="12" class="task"/>
+  <text x="1192" y="235" class="label">Send notification</text>
+  <path d="M1265 230 H1315" class="line"/>
+  <circle cx="1340" cy="230" r="23" class="event"/>
+  <circle cx="1340" cy="230" r="17" class="event"/>
+  <text x="1340" y="275" class="label">Completed</text>
+  <text x="45" y="485" class="heading">Failure and compensation</text>
+  <rect x="60" y="520" width="220" height="65" rx="12" fill="#fee2e2" stroke="#b91c1c" stroke-width="2"/>
+  <text x="170" y="548" class="label">Failure</text>
+  <text x="170" y="570" class="small">Operator attention / recovery</text>
+  <rect x="360" y="520" width="210" height="65" rx="12" class="comp"/>
+  <text x="465" y="558" class="label">Release inventory</text>
+  <path d="M280 552 H360" class="line"/>
+  <rect x="650" y="520" width="210" height="65" rx="12" class="comp"/>
+  <text x="755" y="558" class="label">Refund payment</text>
+  <path d="M650 552 H570" class="line"/>
+  <text x="930" y="550" class="small">Reverse completed steps</text>
+  <text x="930" y="575" class="small">B2B skips payment and refund</text>
+</svg>

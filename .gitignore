@@ -1,0 +1,15 @@
+# Node.js dependencies
+**/node_modules/
+
+# Local environment files
+**/.env
+**/.env.*
+!**/.env.example
+
+# Logs and test output
+**/*.log
+**/coverage/
+
+# Operating system files
+.DS_Store
+Thumbs.db

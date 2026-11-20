@@ -1,0 +1,79 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<bpmn:definitions xmlns:bpmn="http://www.omg.org/spec/BPMN/20100524/MODEL"
+                  id="Definitions_OrderSaga"
+                  targetNamespace="https://example.com/eai/order-saga">
+  <bpmn:error id="Error_Pricing" errorCode="PRICING_FAILED"/>
+  <bpmn:error id="Error_Payment" errorCode="PAYMENT_FAILED"/>
+  <bpmn:error id="Error_Inventory" errorCode="INVENTORY_FAILED"/>
+  <bpmn:error id="Error_Shipping" errorCode="SHIPPING_FAILED"/>
+
+  <bpmn:process id="OrderSaga" name="Order Fulfilment Saga" isExecutable="false">
+
+    <bpmn:startEvent id="Start_OrderAccepted" name="Order accepted">
+      <bpmn:messageEventDefinition id="Message_OrderAccepted"/>
+    </bpmn:startEvent>
+
+    <bpmn:task id="Task_Pricing" name="Calculate price"/>
+    <bpmn:boundaryEvent id="Boundary_PricingError" attachedToRef="Task_Pricing">
+      <bpmn:errorEventDefinition errorRef="Error_Pricing"/>
+    </bpmn:boundaryEvent>
+
+    <bpmn:exclusiveGateway id="Gateway_B2B" name="B2B order?"/>
+
+    <bpmn:task id="Task_Payment" name="Authorize payment"/>
+    <bpmn:boundaryEvent id="Boundary_PaymentError" attachedToRef="Task_Payment">
+      <bpmn:errorEventDefinition errorRef="Error_Payment"/>
+    </bpmn:boundaryEvent>
+
+    <bpmn:task id="Task_Inventory" name="Reserve inventory"/>
+    <bpmn:boundaryEvent id="Boundary_InventoryError" attachedToRef="Task_Inventory">
+      <bpmn:errorEventDefinition errorRef="Error_Inventory"/>
+    </bpmn:boundaryEvent>
+
+    <bpmn:task id="Task_Shipping" name="Create shipment"/>
+    <bpmn:boundaryEvent id="Boundary_ShippingError" attachedToRef="Task_Shipping">
+      <bpmn:errorEventDefinition errorRef="Error_Shipping"/>
+    </bpmn:boundaryEvent>
+
+    <bpmn:task id="Task_Notification" name="Send completion notification"/>
+    <bpmn:endEvent id="End_Completed" name="Completed"/>
+
+    <bpmn:endEvent id="End_Failed" name="Failed"/>
+    <bpmn:endEvent id="End_NeedsAttention" name="Needs operator attention"/>
+
+    <bpmn:serviceTask id="Task_InventoryRelease" name="Release inventory" isForCompensation="true"/>
+    <bpmn:serviceTask id="Task_PaymentRefund" name="Refund payment" isForCompensation="true"/>
+
+    <bpmn:boundaryEvent id="Boundary_InventoryCompensate" attachedToRef="Task_Inventory">
+      <bpmn:compensateEventDefinition/>
+    </bpmn:boundaryEvent>
+
+    <bpmn:boundaryEvent id="Boundary_PaymentCompensate" attachedToRef="Task_Payment">
+      <bpmn:compensateEventDefinition/>
+    </bpmn:boundaryEvent>
+
+    <bpmn:association id="Association_InventoryCompensation"
+                      sourceRef="Task_InventoryRelease"
+                      targetRef="Task_Inventory"
+                      associationDirection="One"/>
+    <bpmn:association id="Association_PaymentCompensation"
+                      sourceRef="Task_PaymentRefund"
+                      targetRef="Task_Payment"
+                      associationDirection="One"/>
+
+    <bpmn:sequenceFlow id="Flow_1" sourceRef="Start_OrderAccepted" targetRef="Task_Pricing"/>
+    <bpmn:sequenceFlow id="Flow_2" sourceRef="Task_Pricing" targetRef="Gateway_B2B"/>
+    <bpmn:sequenceFlow id="Flow_3" sourceRef="Gateway_B2B" targetRef="Task_Inventory" name="Yes"/>
+    <bpmn:sequenceFlow id="Flow_4" sourceRef="Gateway_B2B" targetRef="Task_Payment" name="No"/>
+    <bpmn:sequenceFlow id="Flow_5" sourceRef="Task_Payment" targetRef="Task_Inventory"/>
+    <bpmn:sequenceFlow id="Flow_6" sourceRef="Task_Inventory" targetRef="Task_Shipping"/>
+    <bpmn:sequenceFlow id="Flow_7" sourceRef="Task_Shipping" targetRef="Task_Notification"/>
+    <bpmn:sequenceFlow id="Flow_8" sourceRef="Task_Notification" targetRef="End_Completed"/>
+
+    <bpmn:sequenceFlow id="Flow_PricingError" sourceRef="Boundary_PricingError" targetRef="End_Failed"/>
+    <bpmn:sequenceFlow id="Flow_PaymentError" sourceRef="Boundary_PaymentError" targetRef="End_Failed"/>
+    <bpmn:sequenceFlow id="Flow_InventoryError" sourceRef="Boundary_InventoryError" targetRef="End_NeedsAttention"/>
+    <bpmn:sequenceFlow id="Flow_ShippingError" sourceRef="Boundary_ShippingError" targetRef="End_NeedsAttention"/>
+
+  </bpmn:process>
+</bpmn:definitions>
